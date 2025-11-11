@@ -1,0 +1,499 @@
+[project]
+name = "restaurant-menu-pricing"
+version = "0.1.0"
+description = "UberEats menu price prediction"
+authors = [{ name = "ahmedshahriar", email = "ahmed.shahriar.sakib@gmail.com" }]
+license = "Apache-2.0"
+license-files = [
+    "LICENSE",
+]
+readme = "README.md"
+requires-python = ">=3.11,<3.13"
+dependencies = [
+    # web crawling ETL dependencies
+    "scrapy>=2.13.3,<3.0.0",
+    "chompjs>=1.4.0,<2.0.0",
+    "beautifulsoup4>=4.14.2,<5.0.0",
+    "kagglehub>=0.3.13,<0.4.0",
+    "pymongo>=4.15.2,<5.0.0",
+
+    # machine learning dependencies
+    "scikit-learn>=1.7.2,<2.0.0",
+    # broken metadata err v4.57.0 https://github.com/huggingface/transformers/issues/41331
+    "transformers>=4.56.2,<4.57.0",
+
+    "torch>=2.8.0,<3.0.0",
+    "xgboost>=3.0.5,<4.0.0",
+    "lightgbm (>=4.6.0,<5.0.0)",
+    "scikeras>=0.13.0,<0.14.0",
+    "yellowbrick>=1.5,<2.0",
+    "optuna>=4.5.0,<5.0.0",
+
+    # MLflow and integrations
+    # requirement mlflow<3.0.0 to avoid dependency conflicts with AzureML
+    "mlflow (<3.0.0)",
+    "optuna-integration[mlflow] (>=4.5.0,<5.0.0)",
+
+    # mlflow serve dependencies
+    "virtualenv (>=20.35.3,<21.0.0)",
+    "fastapi (>=0.119.0,<0.120.0)",
+
+    # Azure integration dependencies
+    "azure-ai-ml (>=1.29.0,<2.0.0)",
+    "azureml-mlflow (>=1.60.0.post1,<2.0.0)",
+    "azure-identity (>=1.25.1,<2.0.0)",
+
+    # CLI, logging, validation
+    "python-dotenv>=1.1.1,<2.0.0",
+    "pydantic>=2.11.10,<3.0.0",
+    "pydantic-settings (>=2.11.0,<3.0.0)",
+    "click (>=8.3.0,<9.0.0)",
+    "loguru>=0.7.3,<0.8.0",
+    "tqdm (>=4.67.1,<5.0.0)",
+
+    # visualization dependencies
+    "seaborn>=0.13.2,<0.14.0",
+    "plotly (>=6.3.1,<7.0.0)",
+
+    # Jupyter dependencies
+    "notebook (>=7.4.7,<8.0.0)",
+    "ipywidgets (>=8.1.7,<9.0.0)",
+    "jupyter (>=1.1.1,<2.0.0)",
+
+    # Web app dependencies
+    "streamlit (>=1.50.0,<2.0.0)",
+    "requests (>=2.32.5,<3.0.0)",
+    "clear (>=2.0.0,<3.0.0)",
+]
+
+# OS-specific TensorFlow variants
+[project.optional-dependencies]
+tensorflow = [
+    "tensorflow>=2.16.2,<3.0.0; platform_system == 'Linux' or platform_system == 'Windows'",
+    "tensorflow-macos>=2.16.2,<3.0.0; platform_system == 'Darwin' and platform_machine == 'arm64'",
+    "tensorflow-metal>=1.2.0,<2.0.0; platform_system == 'Darwin' and platform_machine == 'arm64'",
+]
+
+[tool.poetry]
+package-mode = false
+
+[tool.poetry.group.dev.dependencies]
+ruff = "0.13.3"
+pytest = "8.4.2"
+pre-commit = "4.3.0"
+pytest-cov = "^7.0.0"
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+# (Optional) Poetry plugin requirement – OK to keep even when using [project]
+[tool.poetry.requires-plugins]
+poethepoet = { version = "~0.35.0", extras = ["poetry_plugin"] }
+
+[tool.ruff]
+target-version = "py311"
+line-length = 120
+indent-width = 4
+exclude = [".venv","venv","env","build","dist",".mypy_cache",".ruff_cache",".pytest_cache"]
+
+[tool.ruff.format]
+skip-magic-trailing-comma = false
+line-ending = "auto"
+
+[tool.ruff.lint]
+select = ["E","F","I","B","UP"]
+ignore = ["E501"]
+fixable = ["ALL"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["application", "core"]
+
+# ----------------------------------
+# --- Poe the Poet Configuration ---
+# ----------------------------------
+
+[tool.poe.env]
+# Environment variables for API scoring tasks
+PAYLOAD = "tests/payloads/payload.json"
+
+[tool.poe.tasks]
+hello = "echo 'Hello from Poe the Poet 👋'"
+
+# -------------
+# Code Quality
+# -------------
+lint-check   = { cmd = "poetry run ruff check .",             help = "Run static analysis (Ruff)." }
+format-check = { cmd = "poetry run ruff format --check .",    help = "Verify code formatting (Ruff)." }
+lint-fix     = { cmd = "poetry run ruff check --fix .",       help = "Autofix lint issues (Ruff)." }
+format-fix   = { cmd = "poetry run ruff format .",            help = "Apply code formatting (Ruff)." }
+
+# command must be run from the project root directory
+
+# ---------------------------------------------------
+# --- Web Crawling (ETL) to NoSQL Data Store/Json ---
+# ---------------------------------------------------
+
+# Tip: switch to `dotenv run` if your crawlers depend on `.env` values.
+
+# Web crawling ETL tasks
+# crawl restaurant locations, categories, and URLs
+[tool.poe.tasks.crawl-ubereats-categories]
+cmd  = "poetry run scrapy crawl category_us"
+help = "Crawl UberEats categories, locations, and listing URLs (US)."
+
+# crawl restaurant menus and item details
+[tool.poe.tasks.crawl-ubereats-restaurants]
+cmd  = "poetry run scrapy crawl restaurant_us"
+help = "Crawl UberEats restaurant menus and item details (US)."
+
+# -------------------------------------------------
+# --- Export & Sampling from Crawled data store ---
+# -------------------------------------------------
+
+# DWH export pipeline
+# Export raw restaurant & menu documents from the Data Warehouse (MongoDB) to normalized CSV files for downstream
+# publishing/consumption (as kaggle dataset).
+[tool.poe.tasks.dwh-export]
+cmd  = "dotenv run python -m tools.run dwh-export"
+help = "Export DWH (MongoDB) → normalized CSV."
+
+# Generates a sampled, feature-enriched training dataset from the data warehouse exports published on Kaggle.
+# - Uses the Kaggle API (or `kagglehub`) to download the raw crawl export; requires `~/.kaggle/kaggle.json`
+#   or environment variables `KAGGLE_USERNAME` / `KAGGLE_KEY` for authentication.
+# - Performs deterministic sampling and light preprocessing to produce a reproducible training sample
+#   (configurable sample size, stratification, and output format).
+[tool.poe.tasks.generate-train-sample]
+cmd  = "dotenv run python -m tools.run generate-train-sample"
+help = "Create reproducible training sample from Kaggle export."
+
+# ----------------------------
+# --- MLFlow Model Serving ---
+# ----------------------------
+
+# serve the trained model latest version using MLflow
+# change port number if needed
+[tool.poe.tasks.serve-model-local]
+cmd  = "poetry run python -m tools.serve --port 5000"
+help = "Serve the latest model locally on port 5000."
+
+# Example curl command to call the served model
+# change port number if needed
+[tool.poe.tasks.call-inference-local]
+cmd  = """
+curl http://127.0.0.1:5000/invocations \
+  -H "Content-Type: application/json" \
+  --data @tests/payloads/call-inference-local.json
+"""
+help = "Send example inference request to local server."
+
+# ---------------------------------------------------------------------------
+# --- ML Modelling (Training -> Tuning -> Register to AzureML via MLflow) ---
+# ---------------------------------------------------------------------------
+
+# ML pipeline tasks
+[tool.poe.tasks.run-help]
+cmd  = "python -m tools.run --help"
+help = "Show help from the Restaurant Menu Pricing CLI (same as python -m tools.run -h)."
+
+# List all available models
+[tool.poe.tasks.models]
+cmd = "dotenv run python -m tools.run --list-models"
+help = "List all available models for training"
+
+# Quick dry run to preview the execution plan (no training)
+[tool.poe.tasks.dry-run]
+cmd = "dotenv run python -m tools.run --dry-run"
+help = "Show the planned models and config without executing training"
+
+# Run the Restaurant CLI (forwards any flags to run.py)
+# Full ML pipeline: tune all models, compare, and register best one
+[tool.poe.tasks.run-pipeline]
+cmd  = "dotenv run python -m tools.run"
+help = "Run the full pipeline (tune all models, train, compare, and register the best model to AzureML/MLflow)"
+
+# Run pipeline for specific models provided as arguments
+[tool.poe.tasks.run-models]
+cmd = "dotenv run python -m tools.run --models \"${models}\""
+help = "Run the pipeline for specific models (e.g., poetry poe run-models lr,dtree or poetry poe run-models 'lr,dtree')"
+args = [{ name = "models", positional = true, help = "Comma-separated model names (e.g. lr,dtree,xgboost)" }]
+
+# Lightweight dev/test run with fewer trials/folds
+[tool.poe.tasks.run-pipeline-dev]
+cmd = "dotenv run python -m tools.run --n-trials 3 --cv-folds 2"
+help = "Quick development run with minimal Optuna trials and CV folds"
+
+# Full production run with heavier tuning
+[tool.poe.tasks.run-pipeline-prod]
+cmd = "dotenv run python -m tools.run --n-trials 50 --cv-folds 5"
+help = "Full production-grade run with more trials and folds"
+
+# -------------------
+# --- Azure Tasks ---
+# -------------------
+
+# =====================================
+# --- Azure ML – Deploy: Blue/Green ---
+# =====================================
+
+# ---- Deploy ----
+# deploy to azure blue deployment slot and create endpoint if not exists
+[tool.poe.tasks.deploy-blue]
+cmd  = "bash ./scripts/deploy/deploy_endpoint_blue.sh"
+help = "Deploy the application to the Azure blue deployment slot and create endpoint if not exists (idempotent)"
+
+# Optional dry-run preview
+[tool.poe.tasks.deploy-blue-dry]
+cmd  = "bash ./scripts/deploy/deploy_endpoint_blue.sh --dry-run"
+help = "DRY-RUN: show BLUE deploy plan without changing anything"
+
+# smoke test against the blue deployment
+# uses the test payload from
+# infrastructure/azure/endpoints/blue/tests/smoke/ and infrastructure/azure/endpoints/blue/samples/ directories
+[tool.poe.tasks.smoke-blue]
+cmd  = "bash ./infrastructure/azure/endpoints/blue/tests/smoke/run.sh"
+help = "Run smoke test against the blue endpoint"
+
+# deploy to azure green deployment slot and create endpoint if not exists
+[tool.poe.tasks.deploy-green]
+cmd  = "bash ./scripts/deploy/deploy_endpoint_green.sh"
+help = "Deploy the application to the Azure green deployment slot and create endpoint if not exists (idempotent)"
+
+# Optional dry-run preview
+[tool.poe.tasks.deploy-green-dry]
+cmd  = "bash ./scripts/deploy/deploy_endpoint_green.sh --dry-run"
+help = "DRY-RUN: show GREEN deploy plan without changing anything"
+
+# smoke test against the green deployment
+# uses the test payload from
+# infrastructure/azure/endpoints/green/tests/smoke/ and infrastructure/azure/endpoints/green/samples/ directories
+[tool.poe.tasks.smoke-green]
+cmd  = "bash ./infrastructure/azure/endpoints/green/tests/smoke/run.sh"
+help = "Run smoke test against the green endpoint"
+
+# =============================
+# --- Azure Autoscale Tasks ---
+# =============================
+
+# ---- Scale ----
+# Attach autoscale for blue deployment
+[tool.poe.tasks.apply-autoscale-blue]
+cmd  = "bash ./scripts/scale/apply_autoscale_blue.sh"
+help = "Attach/verify Azure Monitor Autoscale for BLUE"
+
+# Optional dry-run preview
+[tool.poe.tasks.apply-autoscale-blue-dry]
+cmd  = "bash ./scripts/scale/apply_autoscale_blue.sh --dry-run"
+help = "DRY-RUN: show autoscale preview (what-if) for BLUE only"
+
+# Attach autoscale for green deployment
+[tool.poe.tasks.apply-autoscale-green]
+cmd  = "bash ./scripts/scale/apply_autoscale_green.sh"
+help = "Attach/verify Azure Monitor Autoscale for GREEN"
+
+# Optional dry-run preview
+[tool.poe.tasks.apply-autoscale-green-dry]
+cmd  = "bash ./scripts/scale/apply_autoscale_green.sh --dry-run"
+help = "DRY-RUN: show autoscale preview (what-if) for GREEN only"
+
+# =================================
+# --- Rollout blue/green/canary ---
+# =================================
+
+# ---- Status/Traffic ----
+# Show current traffic distribution on the endpoint
+[tool.poe.tasks.show-traffic]
+cmd = "bash ./scripts/traffic/show_traffic.sh"
+help = "Print current endpoint traffic map (blue/green weights)"
+
+# Quick status snapshot of both deployments
+[tool.poe.tasks.status]
+cmd = "bash ./scripts/traffic/status.sh"
+help = "Show provisioning_state, traffic_weight, and scale settings for blue & green"
+
+# Parametrized canary step: pass desired green% (and optional blue%)
+# Usage:
+#   poetry poe set-traffic 25         --> (sets green=25, blue=75)
+#   poetry poe set-traffic 50 50      --> (sets green=50, blue=50)
+[tool.poe.tasks.set-traffic]
+cmd = "bash ./scripts/traffic/set_traffic.sh"
+help = "Set traffic split (usage: poetry poe set-traffic <GREEN%> [BLUE%])"
+
+# Promote: smoke test, 100% to green, attach autoscale if not exists, show final traffic split for blue/green
+[tool.poe.tasks.promote-green]
+cmd = "bash ./scripts/traffic/promote_green.sh"
+help = "Cut over all traffic to GREEN (with smoke and attach autoscale if not exists)"
+
+# Rollback instantly to blue
+[tool.poe.tasks.rollback-blue]
+cmd = "bash ./scripts/traffic/rollback_blue.sh"
+help = "Instant rollback: 100% to BLUE"
+
+# Opinionated canary stages (uses set_traffic + smoke in a loop)
+# tests latency and if approved, continues to next step
+# Example usage:
+#   default: poetry poe rollout-green-canary
+# with custom steps:
+#   STEPS="10 30 60 100" poetry poe rollout-green-canary
+# dry run:
+#   poetry poe rollout-green-canary-dry-run
+# dry run + custom steps:
+#   STEPS="5 10 25 50 100" poetry poe rollout-green-canary-dry-run
+# dry run with smoke:
+#   WAIT_SEC=10 SMOKE_CMD="poetry poe smoke-green -- --fast" poetry poe rollout-green-canary-dry-run
+[tool.poe.tasks.rollout-green-canary]
+cmd  = "bash ./scripts/traffic/rollout_green_canary.sh"
+help = "Canary rollout green across steps (override with env: STEPS=\"5 10 25 50 100\")"
+
+[tool.poe.tasks.rollout-green-canary-dry-run]
+cmd  = "bash ./scripts/traffic/rollout_green_canary.sh"
+help = "Preview the canary rollout without changing traffic"
+[tool.poe.tasks.rollout-green-canary-dry-run.env]
+DRY_RUN = "1"
+
+# Fetch and show the scoring URI of the deployed endpoint
+[tool.poe.tasks.show-endpoint-uri]
+cmd  = "bash ./scripts/endpoint/show_endpoint_uri.sh"
+help = "Print the Azure ML endpoint scoring URI (non-secret)"
+
+# -----------------------------------------
+# --- Scoring Proxy API Tasks (FastAPI) ---
+# -----------------------------------------
+[tool.poe.tasks.api-run]
+cmd  = "uvicorn app.main:app --reload --port 8000"
+cwd  = "services/api"
+help = "Run the FastAPI scoring API locally"
+
+[tool.poe.tasks.api-score]
+cmd  = "curl -X POST http://127.0.0.1:8000/api/v1/score -H 'Content-Type: application/json' -d @${PAYLOAD}"
+cwd  = "services/api"
+help = "POST a payload to the proxy API"
+
+[tool.poe.tasks.api-test]
+cmd  = "pytest -q"
+cwd  = "services/api"
+help = "Run API unit tests (uses services/api/pytest config)"
+
+[tool.poe.tasks.api-cov]
+cmd  = "pytest -q --cov=app --cov-report=term-missing"
+cwd  = "services/api"
+help = "Run API tests with coverage of the app package"
+
+# ======================================
+# === Scoring API Tasks (Azure APIM) ===
+# ======================================
+
+# score via API Management (default deployment)
+[tool.poe.tasks.apim-score]
+envfile = "services/common/.env.azure"
+cmd = """
+curl -sS -X POST "https://${APIM_HOST}/aml/score" \
+  -H "Ocp-Apim-Subscription-Key: ${APIM_KEY}" \
+  -H "Content-Type: application/json" \
+  --data "@${PAYLOAD}"
+"""
+cwd  = "services/api"
+help = "Score via APIM (uses APIM_HOST & APIM_KEY)."
+
+# score via APIM, pin the green deployment
+[tool.poe.tasks.apim-score-green]
+envfile = "services/common/.env.azure"
+cmd = """
+curl -sS -X POST "https://${APIM_HOST}/aml/score" \
+  -H "Ocp-Apim-Subscription-Key: ${APIM_KEY}" \
+  -H "azureml-model-deployment: green" \
+  -H "Content-Type: application/json" \
+  --data "@${PAYLOAD}"
+"""
+cwd  = "services/api"
+help = "Score via APIM, pin the green deployment."
+
+# score via APIM, pin the blue deployment
+[tool.poe.tasks.apim-score-blue]
+envfile = "services/common/.env.azure"
+cmd = """
+curl -sS -X POST "https://${APIM_HOST}/aml/score" \
+  -H "Ocp-Apim-Subscription-Key: ${APIM_KEY}" \
+  -H "azureml-model-deployment: blue" \
+  -H "Content-Type: application/json" \
+  --data "@${PAYLOAD}"
+"""
+cwd  = "services/api"
+help = "Score via APIM, pin the blue deployment."
+
+# trace headers for debugging
+[tool.poe.tasks.apim-trace]
+envfile = "services/common/.env.azure"
+cmd = """
+curl -i -sS -X POST "https://${APIM_HOST}/aml/score" \
+  -H "Ocp-Apim-Subscription-Key: ${APIM_KEY}" \
+  -H "Ocp-Apim-Trace: true" \
+  -H "Content-Type: application/json" \
+  --data "@${PAYLOAD}"
+"""
+cwd  = "services/api"
+help = "Score via APIM and return APIM trace headers for debugging."
+
+# API Management run the Streamlit Front-end
+[tool.poe.tasks.apim-ui]
+envfile = "services/common/.env.azure"
+cmd  = "streamlit run services/ui/app.py --server.port 8501 --server.address 0.0.0.0"
+help = "Run the Streamlit UI"
+
+# delete a specific deployment (blue or green)
+[tool.poe.tasks.delete-deployment]
+cmd = "bash ./scripts/endpoint/delete_deployment.sh ${args}"
+help = "Delete a specific deployment (usage: poe delete-deployment blue or poe delete-deployment green)"
+
+# delete the endpoint
+# this also deletes both deployments under the endpoint
+[tool.poe.tasks.delete-endpoint]
+cmd = "bash ./scripts/endpoint/delete_endpoint.sh ${args}"
+help = "Delete the Azure ML endpoint and both deployments (usage: poetry poe delete-endpoint <endpoint-name>) "
+
+# delete the entire Azure resource group
+[tool.poe.tasks.delete-rg]
+cmd = "bash ./scripts/infra/delete_resource_group.sh ${args}"
+help = "Delete the Azure resource group and everything inside it (usage: poetry poe delete-resource-group <resource-group>)"
+
+# -------------
+# --- Tests ---
+# -------------
+
+# global test task
+[tool.poe.tasks.test]
+# either simple test run
+#cmd = "poetry run pytest tests/"
+# or test with coverage (--cov-branch to include branch coverage)
+cmd = "poetry run pytest --cov-branch --cov-report=xml tests/"
+
+# -----------------------------
+# --- Pytest Configuration ---
+# -----------------------------
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+addopts = "-q -ra --disable-warnings --maxfail=1 --cov=."
+testpaths = ["tests/unit", "tests/cli"]
+markers = [
+    "unit: fast unit tests (no IO/network)",
+    "cli: tests that exercise the Click CLIs (tools.run / tools.serve)",
+]
+
+# ------------------------------
+# --- Coverage Configuration ---
+# ------------------------------
+[tool.coverage.run]
+source = ["."]
+omit = [
+    "tests/*",
+    "bot/*",
+    "model/*",
+    "services/*",
+    "infrastructure/azure/*",
+]
+
+[tool.coverage.report]
+fail_under = 70
+show_missing = true
+skip_covered = true
