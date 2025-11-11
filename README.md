@@ -1,4 +1,4 @@
-# Restaurant Menu Pricing
+# Dynamic Menu Pricing
 
 <p align="center">
   <!-- Build, quality & compliance -->
